@@ -18,7 +18,7 @@ from datetime import datetime
 from environment import Environment, generate_llm_market_agents
 from auction import DoubleAuction
 
-from utils import setup_logger
+from utils import setup_logger  # Import the setup_logger function
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Market Simulation Dashboard')
@@ -69,7 +69,7 @@ data = {
     'prices': [],
     'cumulative_quantities': [],
     'cumulative_surplus': [],
-    'price_history': [],
+    'price_history': [],  # New for price history
 }
 
 # Calculate equilibrium values
@@ -90,7 +90,7 @@ app.layout = html.Div([
         disabled=True
     ),
     html.Div([
-        # First Column: Tables (3 tables)
+        # First Column: Tables (4 tables in a 2x2 grid)
         html.Div([
             # Market State Table
             html.Div([
@@ -112,7 +112,7 @@ app.layout = html.Div([
             
         ], className="col-md-6"),  # Half of the screen
         
-        # Second Column: Charts (3 charts)
+        # Second Column: Charts (4 charts in a 2x2 grid)
         html.Div([
             # Supply and Demand Chart
             html.Div([
@@ -134,9 +134,8 @@ app.layout = html.Div([
     
 ], className="container-fluid")
 
-# Global variable to track if the auction has been run and if it's currently running
+# Global variable to track if the auction has been run
 auction_completed = False
-auction_running = False
 
 @app.callback(
     [Output('interval-component', 'disabled'),
@@ -147,22 +146,15 @@ auction_running = False
     [State('interval-component', 'disabled')]
 )
 def toggle_simulation(start_clicks, stop_clicks, interval_disabled):
-    global auction_running
     ctx = dash.callback_context
     if not ctx.triggered:
-        logger.info("No button clicked yet")
         return True, False, True
     else:
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        logger.info(f"Button clicked: {button_id}")
     
     if button_id == 'start-button' and start_clicks > 0:
-        logger.info("Starting simulation")
-        auction_running = True
         return False, True, False
     elif button_id == 'stop-button' and stop_clicks > 0:
-        logger.info("Stopping simulation")
-        auction_running = False
         return True, False, True
     else:
         return interval_disabled, not interval_disabled, interval_disabled
@@ -178,30 +170,31 @@ def toggle_simulation(start_clicks, stop_clicks, interval_disabled):
     State('start-button', 'n_clicks')
 )
 def update_dashboard(n, start_clicks):
-    global auction_completed, auction_running
+    global auction_completed
     
-    if start_clicks == 0 or not auction_running:
+    if start_clicks == 0:
         raise PreventUpdate
 
-    if not auction_completed and auction_running:
-        logger.info(f"Running auction round {auction.current_round}")
-        auction.run_auction()
+    if not auction_completed:
+        logger.info("Starting auction simulation")
+        # Run the entire auction
+        while auction.current_round < auction.max_rounds:
+            auction.run_auction()
+            logger.info(f"Auction round {auction.current_round} completed")
 
-        # save agent interactions after each round
-        for agent in env.agents:
-            logger.info(f"Saving logs for agent {agent.llm_agent.id}, round {auction.current_round}")
-            if hasattr(agent, 'llm_agent') and hasattr(agent.llm_agent, 'interactions'):
-                save_llama_logs(agent.llm_agent.interactions, agent.llm_agent.id, auction.current_round)
-            else:
-                logger.warning(f"Agent {agent.id} does not have llm_agent or interactions attribute")
+            # save agent interactions after each round
+            for agent in env.agents:
+                logger.info(f"Saving logs for agent {agent.llm_agent.id}, round {auction.current_round}")
+                if hasattr(agent, 'llm_agent') and hasattr(agent.llm_agent, 'interactions'):
+                    save_llama_logs(agent.llm_agent.interactions, agent.llm_agent.id, auction.current_round)
+                else:
+                    logger.warning(f"Agent {agent.id} does not have llm_agent or interactions attribute")
 
-        # Update data storage
-        update_data_storage()
+            # Update data storage
+            update_data_storage()
 
-        if auction.current_round >= auction.max_rounds:
-            auction_completed = True
-            auction_running = False
-            logger.info("Auction simulation completed")
+        auction_completed = True
+        logger.info("Auction simulation completed")
 
     # Generate tables and charts
     market_state_table = generate_market_state_table(env)
@@ -281,14 +274,21 @@ def generate_trade_history_table(auction):
     ], className="table table-striped table-hover")
 
 def generate_supply_demand_chart(env):
+    # Calculate theoretical supply and demand
     demand_x, demand_y, supply_x, supply_y = env.calculate_theoretical_supply_demand()
+
+    # Calculate equilibrium values
     ce_price, ce_quantity, _, _, _ = env.calculate_equilibrium()
 
     fig = go.Figure()
     
+    # Plot demand curve
     fig.add_trace(go.Scatter(x=demand_x, y=demand_y, mode='lines', name='Demand', line=dict(color='blue')))
+    
+    # Plot supply curve
     fig.add_trace(go.Scatter(x=supply_x, y=supply_y, mode='lines', name='Supply', line=dict(color='red')))
     
+    # Plot equilibrium lines
     fig.add_trace(go.Scatter(x=[ce_quantity, ce_quantity], y=[0, ce_price], mode='lines', name='CE Quantity', line=dict(color='green', dash='dash')))
     fig.add_trace(go.Scatter(x=[0, ce_quantity], y=[ce_price, ce_price], mode='lines', name='CE Price', line=dict(color='green', dash='dash')))
 
@@ -305,8 +305,11 @@ def generate_supply_demand_chart(env):
 def generate_price_vs_trade_chart():
     fig = go.Figure()
     
-    trade_numbers = list(range(1, len(data['prices']) + 1))
-    fig.add_trace(go.Scatter(x=trade_numbers, y=data['prices'], mode='lines+markers', name='Price per Trade', line=dict(color='blue')))
+    # Fetch actual prices from auction's successful trades
+    trade_numbers = list(range(1, len(auction.successful_trades) + 1))
+    prices = [trade.price for trade in auction.successful_trades]
+
+    fig.add_trace(go.Scatter(x=trade_numbers, y=prices, mode='lines+markers', name='Price per Trade', line=dict(color='blue')))
 
     fig.update_layout(
         title="Price vs Trade",
@@ -321,10 +324,24 @@ def generate_price_vs_trade_chart():
 def generate_cumulative_quantity_surplus_chart():
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    trade_numbers = list(range(1, len(data['cumulative_quantities']) + 1))
+    # Calculate cumulative quantities and surplus
+    cumulative_quantities = []
+    cumulative_surplus = []
+    total_quantity = 0
+    total_surplus = 0
+    
+    for round_num in range(1, auction.max_rounds + 1):
+        trades_in_round = [trade for trade in auction.successful_trades if trade.round == round_num]
+        total_quantity += sum(trade.quantity for trade in trades_in_round)
+        total_surplus += sum((trade.buyer_value - trade.price) + (trade.price - trade.seller_cost) for trade in trades_in_round)
+        
+        cumulative_quantities.append(total_quantity)
+        cumulative_surplus.append(total_surplus)
 
-    fig.add_trace(go.Scatter(x=trade_numbers, y=data['cumulative_quantities'], mode='lines+markers', name='Cumulative Quantity', line=dict(color='red')), secondary_y=False)
-    fig.add_trace(go.Scatter(x=trade_numbers, y=data['cumulative_surplus'], mode='lines+markers', name='Cumulative Surplus', line=dict(color='green')), secondary_y=True)
+    trade_numbers = list(range(1, len(cumulative_quantities) + 1))
+
+    fig.add_trace(go.Scatter(x=trade_numbers, y=cumulative_quantities, mode='lines+markers', name='Cumulative Quantity', line=dict(color='red')), secondary_y=False)
+    fig.add_trace(go.Scatter(x=trade_numbers, y=cumulative_surplus, mode='lines+markers', name='Cumulative Surplus', line=dict(color='green')), secondary_y=True)
 
     fig.update_layout(
         title="Cumulative Quantity vs Surplus",
