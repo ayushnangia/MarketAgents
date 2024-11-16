@@ -29,19 +29,25 @@ jobs:
       - name: Install Docker Compose
         run: |
           sudo apt-get update
-          sudo apt-get install -y docker-compose-plugin
-          
-      - name: starting docker
+          sudo apt-get install -y docker-compose
+      - name: Setup environment
         run: |
+          cp .env.example .env
+
+
+      - name: Starting DB Docker
+        run: |
+          pwd
+          ls -la
           chmod +x market_agents/agents/db/run_setup.sh
           chmod +x market_agents/agents/db/setup_pgvector.sh
-          docker compose up --build -d
-          docker compose exec app ./setup_pgvector.sh
+          docker compose -f ./market_agents/agents/db/docker-compose.yaml up --build -d
+          # Wait for containers to be ready
+          sleep 10
+          docker compose -f ./market_agents/agents/db/docker-compose.yaml ps
+          docker compose -f ./market_agents/agents/db/docker-compose.yaml exec -T app /market_agents/agents/db/setup_pgvector.sh      
       - name: Run tests
         run: |
           # Replace with your test command
 
-      - name: Build Docker image
-        run: |
-          
-          docker build -t your-image-name .
+
