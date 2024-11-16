@@ -1,0 +1,42 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install -r requirements.txt
+      - name: starting docker
+        run: |
+        chmod +x market_agents/agents/db/run_setup.sh
+        chmod +x market_agents/agents/db/setup_pgvector.sh
+        docker-compose up --build -d
+        docker-compose exec app ./setup_pgvector.sh
+      - name: Run tests
+        run: |
+          # Replace with your test command
+
+      - name: Build Docker image
+        run: |
+          
+          docker build -t your-image-name .
