@@ -28,10 +28,10 @@ jobs:
           pip install -r requirements.txt
       - name: starting docker
         run: |
-        chmod +x market_agents/agents/db/run_setup.sh
-        chmod +x market_agents/agents/db/setup_pgvector.sh
-        docker-compose up --build -d
-        docker-compose exec app ./setup_pgvector.sh
+          chmod +x market_agents/agents/db/run_setup.sh
+          chmod +x market_agents/agents/db/setup_pgvector.sh
+          docker-compose up --build -d
+          docker-compose exec app ./setup_pgvector.sh
       - name: Run tests
         run: |
           # Replace with your test command
