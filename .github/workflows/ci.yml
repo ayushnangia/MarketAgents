@@ -26,12 +26,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
           pip install -r requirements.txt
+      - name: Install Docker Compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker-compose-plugin
+          
       - name: starting docker
         run: |
           chmod +x market_agents/agents/db/run_setup.sh
           chmod +x market_agents/agents/db/setup_pgvector.sh
-          docker-compose up --build -d
-          docker-compose exec app ./setup_pgvector.sh
+          docker compose up --build -d
+          docker compose exec app ./setup_pgvector.sh
       - name: Run tests
         run: |
           # Replace with your test command
