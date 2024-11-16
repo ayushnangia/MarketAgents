@@ -45,7 +45,6 @@ jobs:
           # Wait for containers to be ready
           sleep 10
           docker compose -f ./market_agents/agents/db/docker-compose.yaml ps
-          docker compose -f ./market_agents/agents/db/docker-compose.yaml exec -T app /market_agents/agents/db/setup_pgvector.sh      
       - name: Run tests
         run: |
           # Replace with your test command
